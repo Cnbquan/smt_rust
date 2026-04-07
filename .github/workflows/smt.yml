@@ -1,0 +1,40 @@
+name: Build and Push Docker
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # 核心修正：使用 Ubuntu 22.04 提供高版本 GLIBC 支持
+      - name: Create temporary Dockerfile
+        run: |
+          cat <<EOF > Dockerfile
+          FROM ubuntu:22.04
+          ENV DEBIAN_FRONTEND=noninteractive
+          RUN apt-get update && \
+              apt-get install -y --no-install-recommends ca-certificates libc6 libssl-dev && \
+              rm -rf /var/lib/apt/lists/*
+          WORKDIR /app
+          COPY smt_rust /app/smt_rust
+          RUN chmod +x /app/smt_rust
+          ENTRYPOINT ["/app/smt_rust"]
+          EOF
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/smt-rust:latest
