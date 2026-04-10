@@ -17,29 +17,18 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # 核心修正：在脚本里直接生成一个适配 aarch64 运行环境的 Dockerfile
-      - name: Generate and Build
+      # 核心修正：使用 Ubuntu 22.04 提供高版本 GLIBC 支持
+      - name: Create temporary Dockerfile
         run: |
           cat <<EOF > Dockerfile
-          # 强制指定 arm64 的基础镜像，这步决定了底座架构
-          FROM --platform=linux/arm64 ubuntu:22.04
+          FROM ubuntu:22.04
           ENV DEBIAN_FRONTEND=noninteractive
-          # 安装 Rust 运行必需的动态库，解决 exec format error
           RUN apt-get update && \
-              apt-get install -y --no-install-recommends ca-certificates libc6 libssl3 zlib1g && \
+              apt-get install -y --no-install-recommends ca-certificates libc6 libssl-dev && \
               rm -rf /var/lib/apt/lists/*
           WORKDIR /app
-          # 拷贝你仓库里的 smt_rust
           COPY smt_rust /app/smt_rust
           RUN chmod +x /app/smt_rust
-          # 强制指向 arm64 的链接库路径
-          ENV LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu:/lib/aarch64-linux-gnu
           ENTRYPOINT ["/app/smt_rust"]
           EOF
 
@@ -48,7 +37,4 @@ jobs:
         with:
           context: .
           push: true
-          # 这里的 platform 必须和上面 FROM 里的保持一致
-          platforms: linux/arm64
-          # 换个标签名推送，彻底避开爪云之前的错误缓存
-          tags: ${{ secrets.DOCKER_USERNAME }}/smt-rust:v1-arm
+          tags: ${{ secrets.DOCKER_USERNAME }}/smt-rust:latest
