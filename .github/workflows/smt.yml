@@ -17,16 +17,30 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 核心修正：使用 Ubuntu 22.04 提供高版本 GLIBC 支持
+      # 这一步是关键：自动寻找并改名，确保 Dockerfile 能找到文件
+      - name: Prepare binary
+        run: |
+          # 寻找带括号的文件名并重命名为 smt_rust
+          if [ -f "tms_rust (1)" ]; then
+            mv "tms_rust (1)" smt_rust
+          elif [ -f "tms_rust" ]; then
+            mv "tms_rust" smt_rust
+          fi
+          chmod +x smt_rust
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Create temporary Dockerfile
         run: |
           cat <<EOF > Dockerfile
-          FROM ubuntu:22.04
-          ENV DEBIAN_FRONTEND=noninteractive
-          RUN apt-get update && \
-              apt-get install -y --no-install-recommends ca-certificates libc6 libssl-dev && \
-              rm -rf /var/lib/apt/lists/*
+          FROM --platform=linux/arm64 ubuntu:22.04
+          RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
           WORKDIR /app
+          # 此时这里引用的 smt_rust 已经在上一步准备好了
           COPY smt_rust /app/smt_rust
           RUN chmod +x /app/smt_rust
           ENTRYPOINT ["/app/smt_rust"]
@@ -37,4 +51,7 @@ jobs:
         with:
           context: .
           push: true
+          # 适配爪云 aarch64 架构
+          platforms: linux/arm64
+          # 使用你要求的镜像名 smt-rust
           tags: ${{ secrets.DOCKER_USERNAME }}/smt-rust:latest
