@@ -11,31 +11,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 必须步骤 1：登录 Docker Hub
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # 必须步骤 2：开启 aarch64 模拟支持（没这个打包会报错）
+      # 关键步骤：必须安装 QEMU 才能让 x86 服务器处理 arm64 文件
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 核心修正：使用 Ubuntu 22.04 提供高版本 GLIBC 支持
-      - name: Create temporary Dockerfile
+      - name: Create Dockerfile
         run: |
           cat <<EOF > Dockerfile
-          # 显式指定 arm64 架构，适配爪云
+          # 这里一定要加上 --platform=linux/arm64
           FROM --platform=linux/arm64 ubuntu:22.04
-          ENV DEBIAN_FRONTEND=noninteractive
-          RUN apt-get update && \
-              apt-get install -y --no-install-recommends ca-certificates libc6 libssl3 && \
-              rm -rf /var/lib/apt/lists/*
+          RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libc6 libssl3 && rm -rf /var/lib/apt/lists/*
           WORKDIR /app
-          # 既然你仓库文件叫 smt_rust，这里直接 COPY
           COPY smt_rust /app/smt_rust
           RUN chmod +x /app/smt_rust
           ENTRYPOINT ["/app/smt_rust"]
@@ -46,6 +41,6 @@ jobs:
         with:
           context: .
           push: true
-          # 关键：告诉 Docker 这是 arm64 镜像
+          # 这里是重中之重！强制指定平台为 arm64
           platforms: linux/arm64
           tags: ${{ secrets.DOCKER_USERNAME }}/smt-rust:latest
